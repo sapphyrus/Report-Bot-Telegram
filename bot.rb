@@ -116,7 +116,7 @@ if config["ow-check"]
             end
             id += 1
           end
-          sleep 5
+          sleep 5*60
         end
       end
     end
