@@ -4,5 +4,8 @@
   "public": false,
   "ow-check": false,
   "steam-api-key": "",
-  "notifications": true
+  "notifications": true,
+  "cooldown": 21600,
+  "default-reports": 10,
+  "no-usernames": true
 }

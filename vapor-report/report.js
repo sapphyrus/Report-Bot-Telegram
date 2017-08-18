@@ -1,10 +1,11 @@
 var vapor = require('vapor');
 var steamID = require("steamid");
 var protos = require("./protos/protos.js");
+var fs = require('fs', 'data');
 
-if (!process.argv[4]) {
-    console.log("Usage: node report.js [username] [password] [steamid]");
-    process.exit();
+if(process.argv.length == 2){
+    console.log("Usage: node report.js [username] [password] [steamid] [(steamguard)]");
+    return true;
 }
 
 var config = {
@@ -12,6 +13,7 @@ var config = {
     "password": process.argv[3],
     "state": "Online"
 };
+
 var bot = vapor();
 bot.init(config);
 
@@ -31,6 +33,9 @@ function stop(msg) {
 
     bot.disconnect();
 }
+
+//bot.use(vapor.plugins.consoleLogger);
+bot.use(vapor.plugins.fs, 'data/' + process.argv[2]);
 
 // Create custom plugin
 bot.use({
@@ -72,7 +77,14 @@ bot.use({
             }, 15000);
         });
 
-
+        VaporAPI.registerHandler({
+          emitter: '*',
+          event: 'message:warn'
+        }, function(message) {
+          if (message == "Steam login error: InvalidLoginAuthCode.") {
+            stop('SteamGuardRequired');
+          }
+        });
 
         VaporAPI.registerHandler({
             emitter: 'vapor',
@@ -87,7 +99,11 @@ bot.use({
             emitter: 'vapor',
             event: 'steamGuard'
         }, function(callback) {
-            stop('ERROR: Steam Guard not supported');
+            if (process.argv[4]) {
+                callback(process.argv[4]);
+            } else {
+                stop('SteamGuardRequired');
+            }
         });
 
         steamGameCoordinator.on('message', function(header, buffer, callback) {
