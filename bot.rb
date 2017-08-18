@@ -19,7 +19,7 @@ trap("INT") {
   exit
 }
 
-def matchid(sharecode)
+def decode_sharecode(sharecode)
   dictionary = "ABCDEFGHJKLMNOPQRSTUVWXYZabcdefhijkmnopqrstuvwxyz23456789".freeze
   dictionary_length = dictionary.length.freeze
   sharecode = sharecode.dup.gsub(/CSGO|\-/, '')
@@ -285,7 +285,7 @@ Telegram::Bot::Client.run(config['token']) do |bot|
                 if args.length == 2
                   bot.api.send_message(chat_id: message.chat.id, parse_mode: "Markdown", text: "Reportbotting [#{steamid.steam_id64}](https://steamcommunity.com/profiles/#{steamid.steam_id64})!")
                 else
-                  matchid = matchid(args[2].gsub("steam://rungame/730/76561202255233023/+csgo_download_match%20", ""))
+                  matchid = decode_sharecode(args[2].gsub("steam://rungame/730/76561202255233023/+csgo_download_match%20", ""))
                   bot.api.send_message(chat_id: message.chat.id, parse_mode: "Markdown", text: "Reportbotting [#{steamid.steam_id64}](https://steamcommunity.com/profiles/#{steamid.steam_id64}) with matchid #{matchid[:matchid]}!")
                 end
                 accounts_report = get_accounts(config["cooldown"], 0)[0..config["default-reports"]-1]
@@ -324,11 +324,18 @@ Telegram::Bot::Client.run(config['token']) do |bot|
                         rescue UncaughtThrowError => e
                           $steamguard_temp[account[0]] = 0
                           bot.api.send_message(chat_id: message.chat.id, parse_mode: "Markdown", text: tg_prepare("*[#{account[0]}]* - Steam Guard required! Run /steamguard #{account[0]} CODE to send the report"))
-                          sleep 2 while $steamguard_temp[account[0]] == 0
+                          60.times do |i|
+                            sleep 2 if $steamguard_temp[account[0]] == 0
+                          end
                           code = $steamguard_temp[account[0]]
-                          log "Got steamguard on #{account[0]}: #{code.to_s}, re-running"
-                          retry
-                          $steamguard_temp[account[0]] = nil
+                          if code == 0
+                            log "Failed to get steamguard code in 2 minutes, continuing."
+                            bot.api.send_message(chat_id: message.chat.id, parse_mode: "Markdown", text: tg_prepare("*[#{account[0]}]* - Failed to get SteamGuard code in 2 minutes."))
+                          else
+                            log "Got steamguard on #{account[0]}: #{code.to_s}, re-running"
+                            retry
+                            $steamguard_temp[account[0]] = nil
+                          end
                         end
                       rescue
                         bot.api.send_message(chat_id: message.chat.id, parse_mode: "Markdown", text: tg_prepare("*[#{account[0]}]* - Failed to send report. Check console for more details"))
