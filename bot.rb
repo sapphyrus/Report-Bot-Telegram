@@ -278,15 +278,23 @@ Telegram::Bot::Client.run(config['token']) do |bot|
               begin
                 steamid = SteamId.new steamid
               rescue SteamCondenserError
-                bot.api.send_message(chat_id: message.chat.id, text: "Couldn't fetch profile. Check if the url/steamid is correct.")
+                bot.api.send_message(chat_id: message.chat.id, text: "Couldn't fetch profile. Check if the url/steamid is correct. (Accepted Formats: ID64, Profile Link)")
                 steamid = nil
               end
               if !steamid.nil?
                 if args.length == 2
                   bot.api.send_message(chat_id: message.chat.id, parse_mode: "Markdown", text: "Reportbotting [#{steamid.steam_id64}](https://steamcommunity.com/profiles/#{steamid.steam_id64})!")
                 else
-                  matchid = decode_sharecode(args[2].gsub("steam://rungame/730/76561202255233023/+csgo_download_match%20", ""))
-                  bot.api.send_message(chat_id: message.chat.id, parse_mode: "Markdown", text: "Reportbotting [#{steamid.steam_id64}](https://steamcommunity.com/profiles/#{steamid.steam_id64}) with matchid #{matchid[:matchid]}!")
+                  if args[2].to_i.to_s == args[2] && args[2].length == 19
+                    matchid = args[2]
+                  else
+                    begin
+                      matchid = decode_sharecode(args[2].gsub("steam://rungame/730/76561202255233023/+csgo_download_match%20", "")).to_s
+                    rescue
+                      bot.api.send_message(chat_id: message.chat.id, parse_mode: "Markdown", text: "Invalid MatchID/Sharecode!")
+                    end
+                  end
+                  bot.api.send_message(chat_id: message.chat.id, parse_mode: "Markdown", text: "Reportbotting [#{steamid.steam_id64}](https://steamcommunity.com/profiles/#{steamid.steam_id64}) with matchid #{matchid}!")
                 end
                 accounts_report = get_accounts(config["cooldown"], 0)[0..config["default-reports"]-1]
                 if accounts_report.length != config["default-reports"]
@@ -306,7 +314,7 @@ Telegram::Bot::Client.run(config['token']) do |bot|
                             if args.length == 2
                               cmd = "node ./vapor-report/report.js #{account[0]} #{account[1]} #{steamid.steam_id64}"
                             else
-                              cmd = "node ./vapor-report/report_matchid.js #{account[0]} #{account[1]} #{steamid.steam_id64} #{matchid[:matchid]}"
+                              cmd = "node ./vapor-report/report_matchid.js #{account[0]} #{account[1]} #{steamid.steam_id64} #{matchid}"
                             end
                             code = nil
                             begin
