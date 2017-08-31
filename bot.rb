@@ -11,6 +11,9 @@ begin
 rescue LoadError => e
   puts "MISSING DEPENDENCIES! (#{e.message})"
   puts "run 'gem install telegram-bot-ruby colorize steam-condenser sqlite3' to install them."
+  puts ""
+  puts "If the SQLite installation fails, run 'sudo apt-get install ruby-dev sqlite3 sqlite3-dev libsqlite3-dev' and repeat the command above"
+  puts ""
   exit
 end
 
@@ -108,8 +111,10 @@ $no_usernames = config["no-usernames"]
 def tg_prepare(string)
   string = string.encode(Encoding.find('ASCII'), {:invalid => :replace, :undef => :replace, :replace => '', :universal_newline => true})
   if $no_usernames
-    $usernames.each_with_index do |username, i|
-      string = string.gsub(username, "account-#{i+1}")
+    i = 0
+    $usernames.each do |username|
+      i += 1
+      string = string.gsub(username, "account-#{i.to_s}")
     end
   end
   $passwords.each do |password|
@@ -214,29 +219,35 @@ if config["ow-check"]
       log "Steam API seems to be working!".green
       Thread.new do
         while true
-          accounts = Array.new
-          $db.execute("SELECT * FROM reports WHERE banned = 0 ORDER BY id LIMIT 100") do |row|
-            accounts << [row[0], row[1], row[2], row[3], row[4]]
-          end
-          steamids = ""
-          accounts.each do |account|
-            steamids = steamids + "#{account[1]},"
-          end
-          steamids = steamids.chomp(",")
-          result = JSON.parse(open("http://api.steampowered.com/ISteamUser/GetPlayerBans/v1/?key=#{config['steam-api-key']}&steamids=#{steamids}").read)["players"]
-          id = 0
-          result.each do |bans|
-            account = $accounts[id]
-            if bans["NumberOfGameBans"] >= 1
-              $db.execute("UPDATE reports SET banned = 1 WHERE id = #{account[0]}")
-              log "'#{account[1]}' has been banned. Notifying #{account[3]}"
-              Telegram::Bot::Client.run(config['token']) do |bot| #TODO: Müsste besser gehen, ohne dass sich der Bot neu einloggen muss
-                bot.api.send_message(chat_id: account[3].to_i, parse_mode: "Markdown", text: "[#{account[2]}](https://steamcommunity.com/profiles/#{account[1]}) has been OW banned!")
-              end
+          begin
+            @accounts = Array.new
+            $db.execute("SELECT * FROM reports WHERE banned = 0 ORDER BY id DESC LIMIT 20") do |row|
+              @accounts << [row[0], row[1], row[2], row[3], row[4]]
             end
-            id += 1
+            @steamids = ""
+            @accounts.each do |account|
+              @steamids = steamids + "#{account[1]},"
+            end
+            @steamids = @steamids.chomp(",")
+            @result = JSON.parse(open("http://api.steampowered.com/ISteamUser/GetPlayerBans/v1/?key=#{config['steam-api-key']}&steamids=#{steamids}").read)["players"]
+            @id = 0
+            @result.each do |bans|
+              account = @accounts[id]
+              if bans["NumberOfGameBans"] >= 1
+                $db.execute("UPDATE reports SET banned = 1 WHERE steamid = ?", [account[0]])
+                log "'#{account[1]}' has been banned. Notifying #{account[3]}"
+                if !account[3].to_i == 0
+                  Telegram::Bot::Client.run(config['token']) do |bot| #TODO: Müsste besser gehen, ohne dass sich der Bot neu einloggen muss
+                    bot.api.send_message(chat_id: account[3].to_i, parse_mode: "Markdown", text: "[#{account[2]}](https://steamcommunity.com/profiles/#{account[1]}) has been OW banned!")
+                  end
+                end
+              end
+              id += 1
+            end
+          rescue => e
+            log "Error occurred while running ban check: " + e.message + " " + e.backtrace.inspect
           end
-          sleep 5*60
+          sleep 60
         end
       end
     end
@@ -271,7 +282,7 @@ Telegram::Bot::Client.run(config['token']) do |bot|
         when "/report"
           if is_user
             if args.length == 2 or args.length == 3
-              steamid = args[1].gsub("https://", "").gsub("http://", "").gsub("steamcommunity.com/id/", "").gsub("steamcommunity.com/profiles/", "")
+              steamid = args[1].gsub("https://", "").gsub("http://", "").gsub("steamcommunity.com/id/", "").gsub("steamcommunity.com/profiles/", "").chomp("/")
               if steamid.to_i.to_s == steamid
                 steamid = steamid.to_i
               end
@@ -378,7 +389,7 @@ Telegram::Bot::Client.run(config['token']) do |bot|
         when "/reports"
           if is_user
             text = "Latest reports (Limited to 15 entries):\n"
-            $db.execute("SELECT * FROM reports ORDER BY id LIMIT 15") do |row|
+            $db.execute("SELECT * FROM reports ORDER BY id DESC LIMIT 15") do |row|
               if config["ow-check"]
                 banned = "no"
                 banned = "yes" if row[4] == 1
@@ -392,7 +403,7 @@ Telegram::Bot::Client.run(config['token']) do |bot|
         when "/bans"
           if config["ow-check"]
             text = "Latest bans (Limited to 15 entries):\n"
-            $db.execute("SELECT * FROM reports WHERE banned = 1 ORDER BY id LIMIT 15") do |row|
+            $db.execute("SELECT * FROM reports WHERE banned = 1 GROUP BY steamid ORDER BY id DESC LIMIT 15") do |row|
               text = text + "#{row[0].to_s} - [#{row[2]}](https://steamcommunity.com/profiles/#{row[1]})\n"
             end
             bot.api.send_message(chat_id: message.chat.id, parse_mode: "Markdown", text: tg_prepare(text))
