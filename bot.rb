@@ -89,6 +89,7 @@ OpenSSL::SSL::VERIFY_PEER = OpenSSL::SSL::VERIFY_NONE
 
 users = File.read('users.txt').split("\n")
 config = JSON.parse(File.read('config.json').split("\n").join(""))
+
 $accounts = Array.new
 $usernames = Array.new
 $passwords = Array.new
@@ -226,7 +227,7 @@ if config["ow-check"]
             end
             @steamids = ""
             @accounts.each do |account|
-              @steamids = steamids + "#{account[1]},"
+              @steamids = @steamids + "#{account[1]},"
             end
             @steamids = @steamids.chomp(",")
             @result = JSON.parse(open("http://api.steampowered.com/ISteamUser/GetPlayerBans/v1/?key=#{config['steam-api-key']}&steamids=#{steamids}").read)["players"]
