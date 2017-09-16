@@ -259,160 +259,162 @@ Telegram::Bot::Client.run(config['token']) do |bot|
   bot.listen do |message|
     begin
       if !message.text.nil?
-        args = message.text.split(" ")
-        is_user = config["public"] ? true : users.include?(message.chat.id.to_s)
-        log "New message from '" + message.chat.id.to_s + "' (is user: #{is_user}): " + args.inspect
-        case args[0]
-        when "/start"
-          bot.api.send_message(chat_id: message.chat.id, text: "Welcome to #{config['name']}! Your ChatID is " + message.chat.id.to_s)
-        when "/steamguard"
-          if is_user
-            if args.length == 3
-              begin
-                if $steamguard_temp[args[1]] == 0
-                  $steamguard_temp[args[1]] = args[2]
-                  bot.api.send_message(chat_id: message.chat.id, text: "Steamguard set.")
-                else
-                  throw "SteamguardNotRequired"
+        if message.start_with? "/"
+          args = message.text.split(" ")
+          is_user = config["public"] ? true : users.include?(message.chat.id.to_s)
+          log "New message from '" + message.chat.id.to_s + "' (is user: #{is_user}): " + args.inspect
+          case args[0]
+          when "/start"
+            bot.api.send_message(chat_id: message.chat.id, text: "Welcome to #{config['name']}! Your ChatID is " + message.chat.id.to_s)
+          when "/steamguard"
+            if is_user
+              if args.length == 3
+                begin
+                  if $steamguard_temp[args[1]] == 0
+                    $steamguard_temp[args[1]] = args[2]
+                    bot.api.send_message(chat_id: message.chat.id, text: "Steamguard set.")
+                  else
+                    throw "SteamguardNotRequired"
+                  end
+                rescue
+                  bot.api.send_message(chat_id: message.chat.id, text: "Account not found or no SteamGuard required")
                 end
-              rescue
-                bot.api.send_message(chat_id: message.chat.id, text: "Account not found or no SteamGuard required")
               end
             end
-          end
-        when "/report"
-          if is_user
-            if args.length == 2 or args.length == 3
-              steamid = args[1].gsub("https://", "").gsub("http://", "").gsub("steamcommunity.com/id/", "").gsub("steamcommunity.com/profiles/", "").chomp("/")
-              if steamid.to_i.to_s == steamid
-                steamid = steamid.to_i
-              end
-              begin
-                steamid = SteamId.new steamid
-              rescue SteamCondenserError
-                bot.api.send_message(chat_id: message.chat.id, text: "Couldn't fetch profile. Check if the url/steamid is correct. (Accepted Formats: ID64, Profile Link)")
-                steamid = nil
-              end
-              if !steamid.nil?
-                if args.length == 2
-                  bot.api.send_message(chat_id: message.chat.id, parse_mode: "Markdown", text: "Reportbotting [#{steamid.steam_id64}](https://steamcommunity.com/profiles/#{steamid.steam_id64})!")
-                else
-                  if args[2].to_i.to_s == args[2] && args[2].length == 19
-                    matchid = args[2]
-                  else
-                    begin
-                      matchid = decode_sharecode(args[2].gsub("steam://rungame/730/76561202255233023/+csgo_download_match%20", "")).to_s
-                    rescue
-                      bot.api.send_message(chat_id: message.chat.id, parse_mode: "Markdown", text: "Invalid MatchID/Sharecode!")
-                    end
-                  end
-                  bot.api.send_message(chat_id: message.chat.id, parse_mode: "Markdown", text: "Reportbotting [#{steamid.steam_id64}](https://steamcommunity.com/profiles/#{steamid.steam_id64}) with matchid #{matchid}!")
+          when "/report"
+            if is_user
+              if args.length == 2 or args.length == 3
+                steamid = args[1].gsub("https://", "").gsub("http://", "").gsub("steamcommunity.com/id/", "").gsub("steamcommunity.com/profiles/", "").chomp("/")
+                if steamid.to_i.to_s == steamid
+                  steamid = steamid.to_i
                 end
-                accounts_report = get_accounts(config["cooldown"], 0)[0..config["default-reports"]-1]
-                if accounts_report.length != config["default-reports"]
-                  bot.api.send_message(chat_id: message.chat.id, parse_mode: "Markdown", text: "Not enough reports left. Try decreasing the default amount.")
-                elsif accounts_report.length == 0
-                  bot.api.send_message(chat_id: message.chat.id, parse_mode: "Markdown", text: "No accounts found.")
-                else
-                  Thread.new do
-                    begin
-                      threads = []
-                      `node ./vapor-report/protos/updater.js`
-                      Dir.mkdir("data") unless File.directory? "data"
-                      accounts_report.each do |account|
-                        threads << Thread.new do
-                          begin
-                            set_cooldown(account[0], 0)
-                            if args.length == 2
-                              cmd = "node ./vapor-report/report.js #{account[0]} #{account[1]} #{steamid.steam_id64}"
-                            else
-                              cmd = "node ./vapor-report/report_matchid.js #{account[0]} #{account[1]} #{steamid.steam_id64} #{matchid}"
-                            end
-                            code = nil
+                begin
+                  steamid = SteamId.new steamid
+                rescue SteamCondenserError
+                  bot.api.send_message(chat_id: message.chat.id, text: "Couldn't fetch profile. Check if the url/steamid is correct. (Accepted Formats: ID64, Profile Link)")
+                  steamid = nil
+                end
+                if !steamid.nil?
+                  if args.length == 2
+                    bot.api.send_message(chat_id: message.chat.id, parse_mode: "Markdown", text: "Reportbotting [#{steamid.steam_id64}](https://steamcommunity.com/profiles/#{steamid.steam_id64})!")
+                  else
+                    if args[2].to_i.to_s == args[2] && args[2].length == 19
+                      matchid = args[2]
+                    else
+                      begin
+                        matchid = decode_sharecode(args[2].gsub("steam://rungame/730/76561202255233023/+csgo_download_match%20", "")).to_s
+                      rescue
+                        bot.api.send_message(chat_id: message.chat.id, parse_mode: "Markdown", text: "Invalid MatchID/Sharecode!")
+                      end
+                    end
+                    bot.api.send_message(chat_id: message.chat.id, parse_mode: "Markdown", text: "Reportbotting [#{steamid.steam_id64}](https://steamcommunity.com/profiles/#{steamid.steam_id64}) with matchid #{matchid}!")
+                  end
+                  accounts_report = get_accounts(config["cooldown"], 0)[0..config["default-reports"]-1]
+                  if accounts_report.length != config["default-reports"]
+                    bot.api.send_message(chat_id: message.chat.id, parse_mode: "Markdown", text: "Not enough reports left. Try decreasing the default amount.")
+                  elsif accounts_report.length == 0
+                    bot.api.send_message(chat_id: message.chat.id, parse_mode: "Markdown", text: "No accounts found.")
+                  else
+                    Thread.new do
+                      begin
+                        threads = []
+                        `node ./vapor-report/protos/updater.js`
+                        Dir.mkdir("data") unless File.directory? "data"
+                        accounts_report.each do |account|
+                          threads << Thread.new do
                             begin
-                              cmd = cmd + " " + code.to_s unless code == 0
-                              log("[#{account[0]}] running '" + tg_prepare(cmd) + "'")
-                              Open3.popen3(cmd) do |stdin, stdout, stderr, thread|
-                                while !(raw_line = stdout.gets).nil?
-                                  log("[#{account[0]}] - " + tg_prepare(raw_line))
-                                  if raw_line.include? "SteamGuardRequired"
-                                    #if raw_line.chomp.include? "Invalid"
-                                    throw "SteamguardRequired"
-                                  else
-                                    bot.api.send_message(chat_id: message.chat.id, parse_mode: "Markdown", text: tg_prepare("*[#{account[0]}]* - #{raw_line}")) unless raw_line.length <= 2
+                              set_cooldown(account[0], 0)
+                              if args.length == 2
+                                cmd = "node ./vapor-report/report.js #{account[0]} #{account[1]} #{steamid.steam_id64}"
+                              else
+                                cmd = "node ./vapor-report/report_matchid.js #{account[0]} #{account[1]} #{steamid.steam_id64} #{matchid}"
+                              end
+                              code = nil
+                              begin
+                                cmd = cmd + " " + code.to_s unless code == 0
+                                log("[#{account[0]}] running '" + tg_prepare(cmd) + "'")
+                                Open3.popen3(cmd) do |stdin, stdout, stderr, thread|
+                                  while !(raw_line = stdout.gets).nil?
+                                    log("[#{account[0]}] - " + tg_prepare(raw_line))
+                                    if raw_line.include? "SteamGuardRequired"
+                                      #if raw_line.chomp.include? "Invalid"
+                                      throw "SteamguardRequired"
+                                    else
+                                      bot.api.send_message(chat_id: message.chat.id, parse_mode: "Markdown", text: tg_prepare("*[#{account[0]}]* - #{raw_line}")) unless raw_line.length <= 2
+                                    end
                                   end
                                 end
+                              rescue UncaughtThrowError => e
+                                $steamguard_temp[account[0]] = 0
+                                bot.api.send_message(chat_id: message.chat.id, parse_mode: "Markdown", text: tg_prepare("*[#{account[0]}]* - Steam Guard required! Run /steamguard #{account[0]} CODE to send the report"))
+                                60.times do |i|
+                                  sleep 2 if $steamguard_temp[account[0]] == 0
+                                end
+                                code = $steamguard_temp[account[0]]
+                                if code == 0
+                                  log "Failed to get steamguard code in 2 minutes, continuing."
+                                  bot.api.send_message(chat_id: message.chat.id, parse_mode: "Markdown", text: tg_prepare("*[#{account[0]}]* - Failed to get SteamGuard code in 2 minutes."))
+                                else
+                                  log "Got steamguard on #{account[0]}: #{code.to_s}, re-running"
+                                  retry
+                                  $steamguard_temp[account[0]] = nil
+                                end
                               end
-                            rescue UncaughtThrowError => e
-                              $steamguard_temp[account[0]] = 0
-                              bot.api.send_message(chat_id: message.chat.id, parse_mode: "Markdown", text: tg_prepare("*[#{account[0]}]* - Steam Guard required! Run /steamguard #{account[0]} CODE to send the report"))
-                              60.times do |i|
-                                sleep 2 if $steamguard_temp[account[0]] == 0
-                              end
-                              code = $steamguard_temp[account[0]]
-                              if code == 0
-                                log "Failed to get steamguard code in 2 minutes, continuing."
-                                bot.api.send_message(chat_id: message.chat.id, parse_mode: "Markdown", text: tg_prepare("*[#{account[0]}]* - Failed to get SteamGuard code in 2 minutes."))
-                              else
-                                log "Got steamguard on #{account[0]}: #{code.to_s}, re-running"
-                                retry
-                                $steamguard_temp[account[0]] = nil
-                              end
+                            rescue => e
+                              bot.api.send_message(chat_id: message.chat.id, parse_mode: "Markdown", text: tg_prepare("*[#{account[0]}]* - Failed to send report. Check console for more details"))
+                              log "Error occurred while sending report: '" + message.text + "'" + ": " + e.message + " " + e.backtrace.inspect
                             end
-                          rescue => e
-                            bot.api.send_message(chat_id: message.chat.id, parse_mode: "Markdown", text: tg_prepare("*[#{account[0]}]* - Failed to send report. Check console for more details"))
-                            log "Error occurred while sending report: '" + message.text + "'" + ": " + e.message + " " + e.backtrace.inspect
                           end
+                          sleep 0.1
                         end
-                        sleep 0.1
+                        $db.execute("INSERT INTO reports (steamid, nickname, reported_by, banned) VALUES (?, ?, ?, ?)", [steamid.steam_id64.to_s, tg_prepare(steamid.nickname.to_s), message.chat.id.to_s, 0])
+                        ThreadsWait.all_waits(*threads)
+                        update_accounts
+                        bot.api.send_message(chat_id: message.chat.id, parse_mode: "Markdown", text: "#{threads.length.to_s} reports sent to [#{steamid.steam_id64}](https://steamcommunity.com/profiles/#{steamid.steam_id64})! You will receive a notification if he gets banned.")
+                      rescue => e
+                        bot.api.send_message(chat_id: message.chat.id, parse_mode: "Markdown", text: tg_prepare("Failed to send reports. Check console for more details"))
+                        log "Error occurred while sending report: '" + message.text + "'" + ": " + e.message + " " + e.backtrace.inspect
                       end
-                      $db.execute("INSERT INTO reports (steamid, nickname, reported_by, banned) VALUES (?, ?, ?, ?)", [steamid.steam_id64.to_s, tg_prepare(steamid.nickname.to_s), message.chat.id.to_s, 0])
-                      ThreadsWait.all_waits(*threads)
-                      update_accounts
-                      bot.api.send_message(chat_id: message.chat.id, parse_mode: "Markdown", text: "#{threads.length.to_s} reports sent to [#{steamid.steam_id64}](https://steamcommunity.com/profiles/#{steamid.steam_id64})! You will receive a notification if he gets banned.")
-                    rescue => e
-                      bot.api.send_message(chat_id: message.chat.id, parse_mode: "Markdown", text: tg_prepare("Failed to send reports. Check console for more details"))
-                      log "Error occurred while sending report: '" + message.text + "'" + ": " + e.message + " " + e.backtrace.inspect
                     end
                   end
                 end
+              else
+                bot.api.send_message(chat_id: message.chat.id, text: "Usage: /report (SteamID/url)")
               end
             else
-              bot.api.send_message(chat_id: message.chat.id, text: "Usage: /report (SteamID/url)")
+              bot.api.send_message(chat_id: message.chat.id, text: "You're not allowed to use this!")
             end
-          else
-            bot.api.send_message(chat_id: message.chat.id, text: "You're not allowed to use this!")
-          end
-        when "/ammo"
-          if is_user
-            bot.api.send_message(chat_id: message.chat.id, parse_mode: "Markdown", text: "Reports left: *#{get_accounts(config["cooldown"], 0).length.to_s}*\nCommends left: *#{get_accounts(config["cooldown"], 1).length.to_s}*")
-          end
-        when "/reports"
-          if is_user
-            text = "Latest reports (Limited to 15 entries):\n"
-            $db.execute("SELECT * FROM reports ORDER BY id DESC LIMIT 15") do |row|
-              if config["ow-check"]
-                banned = "no"
-                banned = "yes" if row[4] == 1
-                text = text + "#{row[0].to_s} - [#{row[2]}](https://steamcommunity.com/profiles/#{row[1]}) (banned: #{banned})\n"
-              else
+          when "/ammo"
+            if is_user
+              bot.api.send_message(chat_id: message.chat.id, parse_mode: "Markdown", text: "Reports left: *#{get_accounts(config["cooldown"], 0).length.to_s}*\nCommends left: *#{get_accounts(config["cooldown"], 1).length.to_s}*")
+            end
+          when "/reports"
+            if is_user
+              text = "Latest reports (Limited to 15 entries):\n"
+              $db.execute("SELECT * FROM reports ORDER BY id DESC LIMIT 15") do |row|
+                if config["ow-check"]
+                  banned = "no"
+                  banned = "yes" if row[4] == 1
+                  text = text + "#{row[0].to_s} - [#{row[2]}](https://steamcommunity.com/profiles/#{row[1]}) (banned: #{banned})\n"
+                else
+                  text = text + "#{row[0].to_s} - [#{row[2]}](https://steamcommunity.com/profiles/#{row[1]})\n"
+                end
+              end
+              bot.api.send_message(chat_id: message.chat.id, parse_mode: "Markdown", text: tg_prepare(text))
+            end
+          when "/bans"
+            if config["ow-check"]
+              text = "Latest bans (Limited to 15 entries):\n"
+              $db.execute("SELECT * FROM reports WHERE banned = 1 GROUP BY steamid ORDER BY id DESC LIMIT 15") do |row|
                 text = text + "#{row[0].to_s} - [#{row[2]}](https://steamcommunity.com/profiles/#{row[1]})\n"
               end
+              bot.api.send_message(chat_id: message.chat.id, parse_mode: "Markdown", text: tg_prepare(text))
+            else
+              bot.api.send_message(chat_id: message.chat.id, text: "Enable the OW-Check to use this command!")
             end
-            bot.api.send_message(chat_id: message.chat.id, parse_mode: "Markdown", text: tg_prepare(text))
-          end
-        when "/bans"
-          if config["ow-check"]
-            text = "Latest bans (Limited to 15 entries):\n"
-            $db.execute("SELECT * FROM reports WHERE banned = 1 GROUP BY steamid ORDER BY id DESC LIMIT 15") do |row|
-              text = text + "#{row[0].to_s} - [#{row[2]}](https://steamcommunity.com/profiles/#{row[1]})\n"
-            end
-            bot.api.send_message(chat_id: message.chat.id, parse_mode: "Markdown", text: tg_prepare(text))
           else
-            bot.api.send_message(chat_id: message.chat.id, text: "Enable the OW-Check to use this command!")
+            bot.api.send_message(chat_id: message.chat.id, text: "Unknown command.")
           end
-        else
-          bot.api.send_message(chat_id: message.chat.id, text: "Unknown command.")
         end
       end
     rescue StandardError => e
